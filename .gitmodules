@@ -1,0 +1,3 @@
+[submodule "BindingInference"]
+	path = BindingInference
+	url = https://github.com/LabPresse/BindingInference.git

@@ -1,0 +1,83 @@
+In order to extend our PBSA analysis to allow for binding and unbinding, we must first make some adjustments to our model. The most straightforward extension that would incorporate binding and unbinding would be to simply add an "unbound" state to our state model. However, before we start adding states, there are other considerations to be made.
+
+As we modify our model, we need to strike a balance between physical accuracy and computational efficiency. One major drawback to our original formalism is that the time and space complexity of our model scales poorly with large datasets. This poor scaling is due to the fact that each ROI is coupled with every other ROI, limiting the ability to effectively parallelize the inference. On the other hand, we cannot infer accurate transition rates without integrating information from all available ROIs, because without such integration, rare events would often be missed, leading to inaccurate transition rates. With these considerations in mind, we proceed by making two significant modifications to our original framework: first, we replace the computationally expensive Beta-Bernoulli model with a model that tracks only the state levels of each microstate; and second, we infer state trajectories for each ROI individually and then use the Maximum A Posteriori (MAP) state trajectories of each ROI as the "data" that will be fed into a separate model to infer the rate parameters.
+
+Inferring the state levels of a fluorescence trace is a simple process. We first define a fluorophore brightness, $\mu_F$, and a background brightness, $\mu_B$. Let $s_n$ be the number of fluorophores that are bright at time level, $n$. Then assuming an EMCCD detector model, the probability of a measurment, $x_n$, is gamma distributed
+\begin{align}
+    \prob{x_n|s_n,\mu_F,\mu_B} =& \gammapdf{(x_n; s_n\mu_F+\mu_B)/2, 2G}
+\end{align}
+as laid out previously in Eq.~\eqref{PBSA:likelihood}. For the transition probabilities between brightness levels, strictly speaking we should consider all possible microstate combinations that can give rise to a single measurement (e.g. one bright fluorophore and one dark fluorophore gives the same brightness as one bright fluorophore and two dark fluorophores), however this approach is excessively computationally expensive, scaling combinatorically with the size of the microstate space. Furthermore, the posterior over state trajectories is dominated by the measurement likelihood, and even large deviations in the transition rate matrix have negligible impact to the posterior. For these reasons we do not consider the possible microstate combinations that can give rise to a single state level, and we instead model the state level trajectory with a standard HMM process.
+\begin{align}
+    \prob{s_1} =& \categorical{s_1; \bm{\pi}}\\
+    \prob{s_{n+1}|s_n} =& \categorical{s_{n+1}; \bm{\pi}_{s_n}}
+\end{align}
+where $\bm{\pi}_0$ is the initial state probability, $\bm{\pi}$ is the transition probability matrix, and $\bm{\pi_x}$ picks out the $x$th row of the transition matrix.
+
+As shown in Chapter 3, we place priors on the unknowns, $\mu_F$, $\mu_B$, $\bm{\pi}_0$, and $\bm{\pi}$
+\begin{align}
+    \prob{\mu_F} &= \gamma{\mu_F; \kappa_{\mu_F}, \theta_{\mu_F}}\\
+    \prob{\mu_B} &= \gamma{\mu_B; \kappa_{\mu_B}, \theta_{\mu_B}}\\
+    \prob{\bm{\pi}_0} &= \dirichlet{\bm{\pi}_0; \bm{\alpha}_0}\\
+    \prob{\bm{\pi}_k} &= \dirichlet{\bm{\pi}_k; \bm{\alpha}_k}
+\end{align}
+where $\kappa_{\mu_F}$, $\kappa_{\mu_B}$, $\bm{\alpha}_0$, and $\bm{\alpha}_k$ are hyperparameters. Note that for this to work, we must select an additional hyperparamter, $K_\text{max}$, which is the maximum number of bright fluorophores that we will consider.
+
+We can sample from the posterior formed by the above equations to get a Maximum a Posteriori estimate for $s_{1:N}$ for each ROI. Let us combine all the state trajectories into a single array, $\bm{s}$, where each row of $\bm{s}$ is the state trajectory of the corresponding ROI. We now wish to infer the binding and photophysical rates from our state trajectories. Specifically, we want to infer the bind rate, $k_\on$, the unbind rate, $k_\off$, the bright to dark rate, $k_{B\rightarrow D}$, the dark to bright rate, $k_{D\rightarrow B}$, and the bright to photobleach rate, $k_\text{B\rightarrow P}$.
+
+We start by enumerating the microstate space that gives rise to the measured state levels. To do so we choose a maximum number of fluorophores that we would like to consider, $K_\text{max}$ (which may be different than the $K_\text{max}$ used for the single ROI analysis), then we partition the $K_\text{max}$ fluorophores into three microstates: ``bright'', ``dark'', and ``other''. The ``other'' state is a placeholder for photobleached and unbound states. The partitioning can be done as follows
+\begin{itemize}
+    \item State 1: $0$ bright, $0$ dark, $K_\text{max}$ other
+    \item State 2: $1$ bright, $0$ dark, $K_\text{max}-1$ other
+    \item State 3: $0$ bright, $1$ dark, $K_\text{max}-1$ other
+    \item State 4: $2$ bright, $0$ dark, $K_\text{max}-2$ other
+    \item State 5: $1$ bright, $1$ dark, $K_\text{max}-2$ other
+    \item State 6: $0$ bright, $2$ dark, $K_\text{max}-2$ other
+    \item State 7: $3$ bright, $0$ dark, $K_\text{max}-3$ other
+    \item etc.
+\end{itemize}
+Note that this microstate space will grow combinatorically with $K_\text{max}$. Specifically it will grow like $K_\text{max}-2$ choose 2. Still even for $K_\text{max}=100$ the size of the state space is only 5151 microstates, which is well within the realm of tractable computation.
+
+With the state space enumerated we now move on to calculating the transition probabilties between each state. Let $S_i$ be the $i$th macrostate containing a distinct population of bright, dark, and other fluorophores, $S_i=[B_i, D_i, O_i]$. The probability of transitioning from $S_i$ to $S_j$ in a time frame $\dt$, is given by all the possible transitions that could occur in the time window. For simplicity, let us consider that $\dt$ is small enough that we can safely assume that at most one transition can occur per time window. Considering only one transition can happen per time level, there are only 6 possible transitions that can occur
+\begin{align*}
+    [B, D, O] &\rightarrow [B, D, O] &\text{ (no transition)}\\
+    [B, D, O] &\rightarrow [B+1, D, O-1] &\text{ (bind)}\\
+    [B, D, O] &\rightarrow [B-1, D, O+1] &\text{ (bright unbind)}\\
+    [B, D, O] &\rightarrow [B, D-1, O+1] &\text{ (dark unbind)}\\
+    [B, D, O] &\rightarrow [B+1, D-1, O] &\text{ (bright to dark)}\\
+    [B, D, O] &\rightarrow [B-1, D+1, O] &\text{ (dark to bright)}
+\end{align*}
+where we do not allow dark fluorophores to bind directly. The probability of no transition is equal to the probability that the next transition, which is exponentially distributed about the sum of the exit rates, happens after the time window.
+\begin{align}
+    \prob{S_j==S_i|S_i} &= \int_{\dt}^\infty \exppdf{-\dt\lambda_i}\\
+    &= 1 - \exp(-\dt\lambda_i)\\
+    \lambda_i &= C k_\on + (B_i+D_i) k_\off + B_i(k_{B\rightarrow D} + k_{B\rightarrow P}) + D_i k_{D\rightarrow B}
+\end{align}
+where $C k_\on$ is not added when $B_i=K_\text{max}$. Conversely the probability of a transition is equal to the probability that the next transition happens before the time window. The probability of which transition occurs is given by the relative rates of the transitions
+\begin{align}
+    \prob{S_j=[B_i, D_i, O_i]|S_i} &= 1 - \exp(-\dt\lambda_i)\\
+    \prob{S_j=[B_i+1, D_i, O_i-1]|S_i} &= \frac{C k_\on}{\lambda_i}\exp(-\dt\lambda_i)\\
+    \prob{S_j=[B_i-1, D_i, O_i+1]|S_i} &= \frac{B_i (k_\off + k_\text{B\rightarrow P})}{\lambda_i}\exp(-\dt\lambda_i)\\
+    \prob{S_j=[B_i, D_i-1, O_i+1]|S_i} &= \frac{D_i k_\off}{\lambda_i}\exp(-\dt\lambda_i)\\
+    \prob{S_j=[B_i-1, D_i+1, O_i]|S_i} &= \frac{B_i k_{B\rightarrow D}}{\lambda_i}\exp(-\dt\lambda_i)\\
+    \prob{S_j=[B_i+1, D_i-1, O_i]|S_i} &= \frac{D_i k_{D\rightarrow B}}{\lambda_i}\exp(-\dt\lambda_i).
+\end{align}
+As a final note, in order to learn the binding rates separately from the photorates, we must take measurements at different concentrations and laser powers. This is because the binding rates are concentration dependent, while the photophysical rates are laser power dependent. Let us superscript concentration, $C^r$, and laser power, $L^r$, with the ROI index, $r$. Assuming that the photobleaching rate is linearly dependent on the laser power, we can redefine $k_\text{B\rightarrow P} = L^r k_\text{B\rightarrow P}$.
+
+Using the above equations we can calculate a full transition matrix for the microstate space. We can use the transition matrix to calculate the probability of each ROI state level trajectory, $s^r_{1:N}$ given our rates. To do this we use the forward-backward algorithm~\cite{bishop2006pattern, saurabh2022singleI, saurabh2022singleII, safar2022single} where the likelihood of a macrostate at a given time level is 1 if the number of bright fluorophores is equal to the number of bright fluorophores in the measured state level, and 0 otherwise. One way to understand the forward-backward algorithm is to consider that it is marginalizing over all possible macrostate trajectories for a given rate matrix.
+
+The only things left to do are set up priors on the desired rates and set up a sampling algorithm. We set gamma priors on each of our rates
+\begin{align}
+    \prob{k_\on} &= \Gamma(k_\on|\alpha_\on, \beta_\on)\\
+    \prob{k_\off} &= \Gamma(k_\off|\alpha_\off, \beta_\off)\\
+    \prob{k_{B\rightarrow D}} &= \Gamma(k_{B\rightarrow D}|\alpha_{B\rightarrow D}, \beta_{B\rightarrow D})\\
+    \prob{k_{D\rightarrow B}} &= \Gamma(k_{D\rightarrow B}|\alpha_{D\rightarrow B}, \beta_{D\rightarrow B})\\
+    \prob{k_{B\rightarrow P}} &= \Gamma(k_{B\rightarrow P}|\alpha_{B\rightarrow P}, \beta_{B\rightarrow P}).
+\end{align}
+For our sampling algorithm we can use a simple Gibbs updating scheme~\cite{bishop2006pattern}.
+
+This is a possible formulation to develop the model. However, as a possible future development, we have not yet implemented it. It is possible that this formulation may have unforseen problems. For example, the forward-backward algorithm may not be able to efficiently handle the large number of states that we have. Another is that the separation of ROIs may interfere with the ability to learn the rates. We have not yet tested this model on real data.
+
+------
+
+Here is my completed dissertation. This document will be very similar to the comprehensive exam aside from a few major changes:
+1) The intro has been rewritten to focus on bayesian methods within biophysics without a historical context.

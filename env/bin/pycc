@@ -1,0 +1,3 @@
+#!/Users/jbryaniv/Desktop/Projects/AssemblyDissasembly/env/bin/python
+from numba.pycc import main
+main()

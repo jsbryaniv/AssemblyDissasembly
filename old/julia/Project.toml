@@ -1,0 +1,5 @@
+[deps]
+BindingInference = "abc8e426-4e57-11ed-37fe-e18a658c02a6"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+SampleCaches = "e91191c6-8984-4a4d-b031-ef6fb65a77ca"
+SimpleNamespaces = "d3458c95-1ac3-41d3-bc85-3c09f98c159b"

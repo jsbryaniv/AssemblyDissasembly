@@ -1,0 +1,23 @@
+name = "BindingInference"
+uuid = "abc8e426-4e57-11ed-37fe-e18a658c02a6"
+authors = ["Shep Bryan IV <jsbryan4@asu.edu> and contributors"]
+version = "0.1.0"
+
+[deps]
+Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+DistributedArrays = "aaf54ef3-cdf8-58ed-94cc-d582ad619b94"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+FillArrays = "1a297f60-69ca-5386-bcde-b61e274b549b"
+HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SampleCaches = "e91191c6-8984-4a4d-b031-ef6fb65a77ca"
+SharedArrays = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
+SimpleNamespaces = "d3458c95-1ac3-41d3-bc85-3c09f98c159b"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
